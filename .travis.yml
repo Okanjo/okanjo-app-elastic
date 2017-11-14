@@ -6,7 +6,7 @@ node_js:
 services:
   - docker
 before_install:
-  - docker pull docker pull docker.elastic.co/elasticsearch/elasticsearch:5.5.3
+  - docker pull docker.elastic.co/elasticsearch/elasticsearch:5.5.3
   - sudo sysctl -w vm.max_map_count=262144
   - docker run -d -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:5.5.3
   - sleep 10
