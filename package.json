@@ -1,6 +1,6 @@
 {
   "name": "okanjo-app-elastic",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Service for interfacing with Elasticsearch",
   "main": "ElasticService.js",
   "scripts": {
@@ -34,7 +34,7 @@
   },
   "dependencies": {
     "async": "^2.6.0",
-    "elasticsearch": "^14.2.2",
+    "elasticsearch": "^15.2.0",
     "minimatch": "^3.0.4"
   },
   "nyc": {

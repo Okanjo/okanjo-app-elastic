@@ -7,6 +7,8 @@ describe('ElasticService', () => {
     const OkanjoApp = require('okanjo-app');
     const config = require('./config');
 
+    const origTemplate = JSON.stringify(require('./test_schema_template'));
+
     /**
      * App
      * @type {OkanjoApp}
@@ -28,7 +30,10 @@ describe('ElasticService', () => {
         app.connectToServices(() => {
             app.services.elastic.delete(() => {
                 // disrgard error - we don't care we just want it gone
-                done();
+                app.services.elastic.deleteTemplate('unit_test_template', () => {
+                    // disrgard error - we don't care we just want it gone
+                    done();
+                });
             });
         });
     });
@@ -126,7 +131,7 @@ describe('ElasticService', () => {
             // Put a new field in the schema
             app.services.elastic.schema.mappings.my_thing.properties.is_new = {
                 type: "boolean",
-                include_in_all: false
+                //include_in_all: false
             };
 
             app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
@@ -145,56 +150,56 @@ describe('ElasticService', () => {
             });
         });
 
-        it('should add new types', (done) => {
-
-            // Put a new type in the schema
-            app.services.elastic.types.my_thing2 = "my_thing2";
-            app.services.elastic.schema.mappings.my_thing2 = {
-                properties: {
-                    new: {
-                        type: "boolean",
-                        include_in_all: false
-                    },
-                    my_bool: {
-                        type: "boolean",
-                        include_in_all: false
-                    },
-                    category: {
-                        type: "text",
-                        analyzer: "snowball",
-                        fields: {
-                            raw: {
-                                type: "keyword"
-                            },
-                            lowered: {
-                                type: "text",
-                                analyzer: "lowercase_only"
-                            }
-                        }
-                    },
-                    name: {
-                        type: "text",
-                        analyzer: "html_snowball",
-                        include_in_all: true
-                    }
-                }
-            };
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                consistent.should.be.exactly(true);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(true);
-
-                app.services.elastic.getMappings((err, res) => {
-                    should(err).not.be.ok();
-                    should(res[app.services.elastic.index].mappings.my_thing2).be.an.Object();
-                    done();
-                });
-            });
-        });
+        // it('should add new types', (done) => {
+        //
+        //     // Put a new type in the schema
+        //     app.services.elastic.types.my_thing2 = "my_thing2";
+        //     app.services.elastic.schema.mappings.my_thing2 = {
+        //         properties: {
+        //             new: {
+        //                 type: "boolean",
+        //                 //include_in_all: false
+        //             },
+        //             my_bool: {
+        //                 type: "boolean",
+        //                 //include_in_all: false
+        //             },
+        //             category: {
+        //                 type: "text",
+        //                 analyzer: "snowball",
+        //                 fields: {
+        //                     raw: {
+        //                         type: "keyword"
+        //                     },
+        //                     lowered: {
+        //                         type: "text",
+        //                         analyzer: "lowercase_only"
+        //                     }
+        //                 }
+        //             },
+        //             name: {
+        //                 type: "text",
+        //                 analyzer: "html_snowball",
+        //                 //include_in_all: true
+        //             }
+        //         }
+        //     };
+        //
+        //     app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
+        //         should(err).not.be.ok();
+        //
+        //         consistent.should.be.exactly(true);
+        //         created.should.be.exactly(false);
+        //         settings.should.be.exactly(true);
+        //         mappings.should.be.exactly(true);
+        //
+        //         app.services.elastic.getMappings((err, res) => {
+        //             should(err).not.be.ok();
+        //             should(res[app.services.elastic.index].mappings.my_thing2).be.an.Object();
+        //             done();
+        //         });
+        //     });
+        // });
 
         it('should add new analyzers', (done) => {
 
@@ -232,7 +237,7 @@ describe('ElasticService', () => {
                     match_mapping_type: "string",
                     mapping: {
                         type: "keyword",
-                        include_in_all: false
+                        //include_in_all: false
                     }
                 }
             });
@@ -375,14 +380,14 @@ describe('ElasticService', () => {
         });
 
         it('should warn when mappings change', (done) => {
-            app.services.elastic.schema.mappings.my_thing.properties.some_url.include_in_all = true;
+            // app.services.elastic.schema.mappings.my_thing.properties.some_url.include_in_all = true;
             app.services.elastic.schema.mappings.my_thing.properties.is_new.type = "double";
             app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
                 should(err).not.be.ok();
 
                 // Revert
                 app.services.elastic.schema.mappings.my_thing.properties.is_new.type = "boolean";
-                app.services.elastic.schema.mappings.my_thing.properties.some_url.include_in_all = false;
+                // app.services.elastic.schema.mappings.my_thing.properties.some_url.include_in_all = false;
 
                 consistent.should.be.exactly(false);
                 created.should.be.exactly(false);
@@ -413,13 +418,13 @@ describe('ElasticService', () => {
         });
 
         it('should warn when multi-field mappings change', (done) => {
-            app.services.elastic.schema.mappings.my_thing.properties.category.include_in_all = true;
+            // app.services.elastic.schema.mappings.my_thing.properties.category.include_in_all = true;
             app.services.elastic.schema.mappings.my_thing.properties.category.fields.lowered.analyzer = "lowercase_only2";
             app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
                 should(err).not.be.ok();
 
                 // Revert
-                app.services.elastic.schema.mappings.my_thing.properties.category.include_in_all = false;
+                // app.services.elastic.schema.mappings.my_thing.properties.category.include_in_all = false;
                 app.services.elastic.schema.mappings.my_thing.properties.category.fields.lowered.analyzer = "lowercase_only";
 
                 consistent.should.be.exactly(false);
@@ -563,25 +568,26 @@ describe('ElasticService', () => {
             });
         });
 
-        it('should warn when types are removed', (done) => {
-            const original = app.services.elastic.schema.mappings.my_thing2;
-            const mappings = app.services.elastic.schema.mappings;
-            delete mappings.my_thing2;
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                app.services.elastic.schema.mappings.my_thing2 = original;
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
-            });
-        });
+        //
+        // it('should warn when types are removed', (done) => {
+        //     const original = app.services.elastic.schema.mappings.my_thing2;
+        //     const mappings = app.services.elastic.schema.mappings;
+        //     delete mappings.my_thing2;
+        //
+        //     app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
+        //         should(err).not.be.ok();
+        //
+        //         // Revert
+        //         app.services.elastic.schema.mappings.my_thing2 = original;
+        //
+        //         consistent.should.be.exactly(false);
+        //         created.should.be.exactly(false);
+        //         settings.should.be.exactly(true);
+        //         mappings.should.be.exactly(false);
+        //
+        //         done();
+        //     });
+        // });
 
         it('should warn when analyzers are removed', (done) => {
             const original = app.services.elastic.schema.settings.analysis.analyzer.lowercase_only2;
@@ -687,14 +693,14 @@ describe('ElasticService', () => {
 
         it('should work without options', (done) => {
             const body = [
-                { index: { _id: "doc3", _type: app.services.elastic.types.my_thing2 } },
+                { index: { _id: "doc3", _type: app.services.elastic.types.my_thing } },
                 {
                     my_bool: false,
                     category: "Nope",
                     name: "A Cool my_thing"
                 },
 
-                { index: { _id: "doc4", _type: app.services.elastic.types.my_thing2 } },
+                { index: { _id: "doc4", _type: app.services.elastic.types.my_thing } },
                 {
                     my_bool: true,
                     category: "Yup",
@@ -771,7 +777,7 @@ describe('ElasticService', () => {
                 should(res).be.an.Object();
                 should(status).be.exactly(200);
 
-                should(res.hits.total).be.exactly(2);
+                should(res.hits.total).be.exactly(4); // since types are dead we get 4 instead of 2
 
                 done();
             });
@@ -922,7 +928,7 @@ describe('ElasticService', () => {
         });
 
         it('works with a type by not returning docs', (done) => {
-            app.services.elastic.get('doc1', { type: app.services.elastic.types.my_thing2 }, (err, res, status) => {
+            app.services.elastic.get('doc1', { type: "my_thing2" }, (err, res, status) => {
                 should(err).not.be.ok();
                 should(res).be.exactly(null);
                 should(status).be.exactly(404);
@@ -960,6 +966,46 @@ describe('ElasticService', () => {
                 }
             ], done);
         });
-    })
+    });
+
+    describe('templates', () => {
+
+        it('should add a template', (done) => {
+            const template = JSON.parse(origTemplate);
+            app.services.elastic.putTemplate('unit_test_template', template, (err, res, status) => {
+
+                should(err).not.be.ok();
+                res.acknowledged.should.be.exactly(true);
+                status.should.be.exactly(200);
+
+                done();
+            })
+        });
+
+        it('should update a template', (done) => {
+            const template = JSON.parse(origTemplate);
+            template.mappings.my_thing.properties.new_prop = { type: "long" };
+            app.services.elastic.putTemplate('unit_test_template', template, { create: false }, (err, res, status) => {
+
+                should(err).not.be.ok();
+                res.acknowledged.should.be.exactly(true);
+                status.should.be.exactly(200);
+
+                done();
+            })
+        });
+
+        it('should delete a template', (done) => {
+            app.services.elastic.deleteTemplate('unit_test_template', (err, res, status) => {
+
+                should(err).not.be.ok();
+                res.acknowledged.should.be.exactly(true);
+                status.should.be.exactly(200);
+
+                done();
+            })
+        });
+
+    });
 
 });

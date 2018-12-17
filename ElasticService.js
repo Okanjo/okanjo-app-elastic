@@ -11,18 +11,21 @@ class ElasticService {
 
     /**
      * Constructor
-     * @param app
-     * @param config
+     * @param app - OkanjoApp
+     * @param config – ElasticSearch Client configuration
+     * @param index – Index configuration
      */
-    constructor(app, config) {
+    constructor(app, config, index) {
 
         // Hold the app reference and config
         this.app = app;
         this.config = config || app.config.elasticsearch;
 
-        this.index = this.config.index.name;
-        this.schema = this.config.index.schema;
-        this.types = this.config.index.types;
+        // Backwards compat config, but index should be removed from connection config
+        index = index || this.config.index;
+        this.index = index.name;
+        this.schema = index.schema;
+        this.types = index.types;
 
         // Elastic Stuff
         this.client = new ElasticSearch.Client(this.config);
@@ -165,6 +168,7 @@ class ElasticService {
         });
     }
 
+    /* istanbul ignore next: Elastic 5 leftovers */
     /**
      * Adds a new doc type mapping to the index
      * @param {string} type – Doc type name defined in the schema
@@ -384,6 +388,7 @@ class ElasticService {
                     let consistent = true;
 
                     Object.keys(expectedMappings).forEach((type) => {
+                        /* istanbul ignore if: Elastic 5 leftovers */
                         if (!actualMappings[type]) {
                             // New type!
                             tasks.push((next) => {
@@ -516,6 +521,7 @@ class ElasticService {
 
                     // Check for remnant properties
                     const deadTypes = Object.keys(res[this.index].mappings).filter((type) => !checkedTypes.has(type));
+                    /* istanbul ignore if: Elastic 5 leftovers */
                     if (deadTypes.length > 0) {
                         this.app.report(`Warning: Doc types were removed from schema but still exist in index: ${this.index} -> ${deadTypes.join(', ')}`);
                         consistent = false;
@@ -573,6 +579,7 @@ class ElasticService {
             // simple mapping
             // only check if field is enabled, otherwise forget it
             if (existing.enabled !== false || actual.enabled !== false) {
+                /* istanbul ignore next: Elastic 5 leftovers */
                 if (existing.type !== actual.type ||
                     this._normalizeIndexValue(existing.type, existing.index) !== this._normalizeIndexValue(actual.type, actual.index) ||
                     existing.analyzer !== actual.analyzer ||
@@ -586,6 +593,7 @@ class ElasticService {
         } else {
             // complex mapping
 
+            /* istanbul ignore next: Elastic 5 leftovers */
             if (//existing.type !== actual.type ||
             //existing.index !== actual.index ||
             //existing.analyzer !== actual.analyzer ||
@@ -752,7 +760,7 @@ class ElasticService {
             // Create if not exists
             (exists, next) => {
                 if (!exists) {
-                    this.create((err, success) => next(err, exists));
+                    this.create((err/*, success*/) => next(err, exists));
                 } else {
                     next(null, exists);
                 }
@@ -943,6 +951,55 @@ class ElasticService {
                 // Eat the error
                 err = null;
                 res = null;
+            }
+            callback(err, res, status);
+        });
+    }
+
+    /**
+     * Adds or updates an index template
+     * @param name
+     * @param schema
+     * @param options
+     * @param callback
+     */
+    putTemplate(name, schema, options, callback) {
+        const payload = {};
+        if (typeof options === "function") {
+            callback = options;
+            options = {};
+        } else {
+            // Copy options on top of payload (override)
+            Object.keys(options).forEach((key) => {
+                payload[key] = options[key];
+            });
+        }
+
+        payload.name = name;
+        payload.body = schema;
+
+        this.client.indices.putTemplate(payload, (err, res, status) => {
+            /* istanbul ignore if: out of scope */
+            if (err) {
+                this.app.report('Failed to add/update index template', err, {res,status,payload});
+            }
+            callback(err, res, status);
+        });
+    }
+
+    /**
+     * Removes an index template
+     * @param name
+     * @param callback
+     */
+    deleteTemplate(name, callback) {
+        const payload = {
+            name
+        };
+        this.client.indices.deleteTemplate(payload, (err, res, status) => {
+            /* istanbul ignore if: out of scope */
+            if (err) {
+                this.app.report('Failed to remove index template', err, {res,status,payload});
             }
             callback(err, res, status);
         });
