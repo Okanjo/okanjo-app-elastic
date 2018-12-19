@@ -1,7 +1,6 @@
 "use strict";
 
 module.exports = {
-    "index_patterns": ["unit_test_things*"],
     settings: {
         "number_of_shards": 2,
         analysis: {

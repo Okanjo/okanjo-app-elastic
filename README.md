@@ -167,8 +167,11 @@ Pings the elasticsearch server to see if it is available.
   * `err` – Error, if present
   * `exists` – Boolean, `true` if service is available or `false` if not.
  
-### `elastic.create(callback)`
-Creates the elasticsearch index as configured by the name and schema. 
+### `elastic.create([options], callback)`
+Creates the elasticsearch index as configured by the name and schema.
+* `options` – Optional, create index command options
+  * `index` – The name of the index to create, defaults to `elastic.index`.
+  * `schema` – Optional, The index mappings and settings object, `null` to not set a body at all (e.g. use existing template), or leave unset to default to `elastic.schema`.
 * `callback(err, success, res)` – Function to fire when completed
   * `err` – Error, if present
   * `success` – Whether the statusCode of the response was `200`
@@ -255,9 +258,27 @@ Gets the index's current mappings.
 ### `elastic.getSettings(callback)`
 Gets the index's current settings.
 * `callback(err, res, status)` – Function to fire when completed
-* `err` – Error, if present
-* `res` – The response given from elasticsearch
-* `status` – The statusCode of the response
+  * `err` – Error, if present
+  * `res` – The response given from elasticsearch
+  * `status` – The statusCode of the response
+
+### `elastic.putTemplate(name, schema, index_patterns, [options], callback)`
+Creates or updates an index template.
+* `name` – Template name
+* `index_patterns` – Array of index pattern strings
+* `schema` – Template body, e.g. `{ mappings: {}, settings: {} }`
+* `options` – Optional, Elasticsearch route putTemplate options
+* `callback(err, res, status)` – Function to fire when completed
+  * `err` – Error, if present
+  * `res` – The response given from elasticsearch
+  * `status` – The statusCode of the response
+
+### `elastic.deleteTemplate(name, callback)`
+* `name` – Template name to delete
+* `callback(err, res, status)` – Function to fire when completed
+  * `err` – Error, if present
+  * `res` – The response given from elasticsearch
+  * `status` – The statusCode of the response
  
 ### Not Implemented?
 Is your elastic client function missing? No problem. 

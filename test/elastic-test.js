@@ -24,15 +24,28 @@ describe('ElasticService', () => {
 
         // Add the redis service to the app
         app.services = {
-            elastic: new ElasticService(app)
+            elastic: new ElasticService(app),
+            elastic_better: new ElasticService(
+                app,
+                app.copy({}, app.config.elasticsearch_default_cluster),
+                app.config.elastic_unit_test_index.index
+            )
         };
 
         app.connectToServices(() => {
             app.services.elastic.delete(() => {
                 // disrgard error - we don't care we just want it gone
-                app.services.elastic.deleteTemplate('unit_test_template', () => {
+
+                // remove template-built-index too
+                app.services.elastic.client.indices.delete({
+                    index: 'unit_test_things_1'
+                }, () => {
                     // disrgard error - we don't care we just want it gone
-                    done();
+
+                    app.services.elastic.deleteTemplate(app.config.elastic_unit_test_index.template_name, () => {
+                        // disrgard error - we don't care we just want it gone
+                        done();
+                    });
                 });
             });
         });
@@ -67,6 +80,15 @@ describe('ElasticService', () => {
             "manager.age": {"type":"integer"},
             "manager.name.first":{"type":"text"},
             "manager.name.last":{"type":"text"}
+        });
+
+    });
+
+    it('works with the better config structure', (done) => {
+
+        app.services.elastic_better.ping((err) => {
+            should(err).not.be.ok();
+            done();
         });
 
     });
@@ -972,38 +994,93 @@ describe('ElasticService', () => {
 
         it('should add a template', (done) => {
             const template = JSON.parse(origTemplate);
-            app.services.elastic.putTemplate('unit_test_template', template, (err, res, status) => {
+            app.services.elastic.putTemplate(
+                app.config.elastic_unit_test_index.template_name,
+                app.config.elastic_unit_test_index.index_patterns,
+                template,
+                (err, res, status) => {
 
-                should(err).not.be.ok();
-                res.acknowledged.should.be.exactly(true);
-                status.should.be.exactly(200);
+                    should(err).not.be.ok();
+                    res.acknowledged.should.be.exactly(true);
+                    status.should.be.exactly(200);
 
-                done();
-            })
+                    done();
+                }
+            );
         });
 
         it('should update a template', (done) => {
             const template = JSON.parse(origTemplate);
             template.mappings.my_thing.properties.new_prop = { type: "long" };
-            app.services.elastic.putTemplate('unit_test_template', template, { create: false }, (err, res, status) => {
+            app.services.elastic.putTemplate(
+                app.config.elastic_unit_test_index.template_name,
+                app.config.elastic_unit_test_index.index_patterns,
+                template,
+                { create: false },
+                (err, res, status) => {
 
+                    should(err).not.be.ok();
+                    res.acknowledged.should.be.exactly(true);
+                    status.should.be.exactly(200);
+
+                    done();
+                }
+            );
+        });
+
+        it('should create an index from a template', (done) => {
+            app.services.elastic.create({
+                index: 'unit_test_things_1',
+                schema: null // don't use the configured mappings
+            }, (err, success, res) => {
                 should(err).not.be.ok();
+                should(success).be.ok();
                 res.acknowledged.should.be.exactly(true);
-                status.should.be.exactly(200);
 
-                done();
-            })
+                // get mappings to verify
+                app.services.elastic.client.indices.getMapping({
+                    index: 'unit_test_things_1'
+                }, (err, res, status) => {
+                    should(err).not.be.ok();
+                    should(res).be.ok();
+                    should(status).be.exactly(200);
+
+                    res.unit_test_things_1.mappings.my_thing.properties.atom.type.should.be.exactly('long');
+
+                    // verify settings
+                    app.services.elastic.client.indices.getSettings({
+                        index: 'unit_test_things_1'
+                    }, (err, res, status) => {
+                        should(err).not.be.ok();
+                        should(res).be.ok();
+                        should(status).be.exactly(200);
+
+                        res.unit_test_things_1.settings.index.number_of_shards.should.be.exactly('2');
+
+                        // delete the test templated index
+                        app.services.elastic.client.indices.delete({
+                            index: 'unit_test_things_1'
+                        }, (err, res, status) => {
+                            should(err).not.be.ok();
+                            res.acknowledged.should.be.exactly(true);
+                            status.should.be.exactly(200);
+
+                            done();
+                        });
+                    });
+                });
+            });
         });
 
         it('should delete a template', (done) => {
-            app.services.elastic.deleteTemplate('unit_test_template', (err, res, status) => {
+            app.services.elastic.deleteTemplate(app.config.elastic_unit_test_index.template_name, (err, res, status) => {
 
                 should(err).not.be.ok();
                 res.acknowledged.should.be.exactly(true);
                 status.should.be.exactly(200);
 
                 done();
-            })
+            });
         });
 
     });

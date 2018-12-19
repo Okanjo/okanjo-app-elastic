@@ -70,12 +70,21 @@ class ElasticService {
 
     /**
      * Creates the index
+     * @param {*} options
      * @param {ElasticService~createCallback} callback
      */
-    create(callback) {
+    create(options, callback) {
+        if (typeof options === "function") {
+            callback = options;
+            options = {};
+        }
+
+        const index = options.index || this.index;
+        const body = options.schema !== undefined ? (options.schema || undefined) : this.schema;
+
         this.client.indices.create({
-            index: this.index,
-            body: this.schema
+            index,
+            body
         }, (err, res, status) => {
             /* istanbul ignore if: out of scope */
             if (err) {
@@ -959,11 +968,12 @@ class ElasticService {
     /**
      * Adds or updates an index template
      * @param name
+     * @param patterns
      * @param schema
      * @param options
      * @param callback
      */
-    putTemplate(name, schema, options, callback) {
+    putTemplate(name, patterns, schema, options, callback) {
         const payload = {};
         if (typeof options === "function") {
             callback = options;
@@ -976,7 +986,8 @@ class ElasticService {
         }
 
         payload.name = name;
-        payload.body = schema;
+        payload.body = this.app.copy({}, schema);
+        payload.body.index_patterns = patterns;
 
         this.client.indices.putTemplate(payload, (err, res, status) => {
             /* istanbul ignore if: out of scope */
