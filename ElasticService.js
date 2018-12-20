@@ -987,7 +987,20 @@ class ElasticService {
 
         payload.name = name;
         payload.body = this.app.copy({}, schema);
-        payload.body.index_patterns = patterns;
+
+        /* istanbul ignore next: elastic 6.x broke templates by changing `template to index_patterns` */
+        if (!this.config.apiVersion || parseFloat(this.config.apiVersion) >= 6.0) {
+            payload.body.index_patterns = patterns;
+        } else {
+            if (patterns.length > 1) {
+                // More than one template wildcard defined, we must explode
+                const err = new Error('Breaking Change: Elastic 5.x and older does not support multiple template wildcard patterns');
+                this.app.report(err);
+                return callback(err);
+            } else {
+                payload.body.template = patterns.join('');
+            }
+        }
 
         this.client.indices.putTemplate(payload, (err, res, status) => {
             /* istanbul ignore if: out of scope */
