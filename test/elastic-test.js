@@ -113,11 +113,15 @@ describe('ElasticService', () => {
             statusCode.should.be.exactly(200);
         });
 
-        // should delete a template
+        // should delete a template and created indices
         after(async () => {
             const { statusCode, body } = await app.services.elastic.deleteTemplate(app.config.elasticsearch.unit_test_index.template_name);
             body.acknowledged.should.be.exactly(true);
             statusCode.should.be.exactly(200);
+
+            await app.services.elastic.delete({ index: 'unit_test_things_1'});
+            await app.services.elastic.delete({ index: 'unit_test_things_do_create'});
+            await app.services.elastic.delete({ index: 'unit_test_things_do_create_shards'});
         });
 
         it('should update a template', async () => {
@@ -165,6 +169,107 @@ describe('ElasticService', () => {
                 index: 'unit_test_things_1'
             });
             success.should.be.ok();
+        });
+
+        it('should ensure a templated index with create', async () => {
+            // typical config format
+            const indexConfig = {
+                template_name: 'unit_test_template',
+                index_patterns: ["unit_test_things*"],
+                template: require('./test_schema_template'),
+                index: {
+                    name: 'unit_test_things_do_create',
+                    // schema: require('./test_schema'),
+                    // types: {
+                    //     my_thing: 'my_thing'
+                    // }
+                }
+            };
+
+            // Ensure it
+            let res = await app.services.elastic.ensureTemplatedIndex(indexConfig, true);
+            should(res).be.ok();
+
+            // confirm it exists
+            res = await app.services.elastic.exists({ index: indexConfig.index.name });
+            should(res).be.ok();
+
+            // Ensuring it again should still be good
+            res = await app.services.elastic.ensureTemplatedIndex(indexConfig, true);
+            should(res).be.ok();
+
+            // ensure shards are intact
+            res = await app.services.elastic.getSettings({ index: indexConfig.index.name });
+            should(res).be.ok();
+            res.statusCode.should.be.exactly(200);
+            res.body[indexConfig.index.name].settings.index.number_of_shards.should.be.exactly('2');
+
+            // ensure it has mappings
+            res = await app.services.elastic.getMappings({ index: indexConfig.index.name });
+            should(res).be.ok();
+            should(res.body[indexConfig.index.name].mappings.my_thing).be.ok();
+        });
+
+        it('should ensure a templated index with create and overridden number of shards', async () => {
+            // typical config format
+            const indexConfig = {
+                template_name: 'unit_test_template',
+                index_patterns: ["unit_test_things*"],
+                template: require('./test_schema_template'),
+                index: {
+                    name: 'unit_test_things_do_create_shards',
+                    // schema: require('./test_schema'),
+                    // types: {
+                    //     my_thing: 'my_thing'
+                    // }
+                }
+            };
+            const body = {
+                settings: {
+                    number_of_shards: 1
+                }
+            };
+
+            // Ensure it
+            let res = await app.services.elastic.ensureTemplatedIndex(indexConfig, true, body);
+            should(res).be.ok();
+
+            // confirm it exists
+            res = await app.services.elastic.exists({ index: indexConfig.index.name });
+            should(res).be.ok();
+
+            // ensure shards were changed
+            res = await app.services.elastic.getSettings({ index: indexConfig.index.name });
+            should(res).be.ok();
+            res.statusCode.should.be.exactly(200);
+            res.body[indexConfig.index.name].settings.index.number_of_shards.should.be.exactly('1');
+
+            // ensure it has mappings
+            res = await app.services.elastic.getMappings({ index: indexConfig.index.name });
+            should(res).be.ok();
+            should(res.body[indexConfig.index.name].mappings.my_thing).be.ok();
+        });
+
+        it('should ensure a templated index without create', async () => {
+            // typical config format
+            const indexConfig = {
+                template_name: 'unit_test_template',
+                index_patterns: ["unit_test_things*"],
+                template: require('./test_schema_template'),
+                index: {
+                    name: 'unit_test_things_no_create',
+                    // schema: require('./test_schema'),
+                    // types: {
+                    //     my_thing: 'my_thing'
+                    // }
+                }
+            };
+            let res = await app.services.elastic.ensureTemplatedIndex(indexConfig, false);
+            should(res).be.ok();
+
+            // confirm it exists
+            res = await app.services.elastic.exists({ index: indexConfig.index.name });
+            should(res).not.be.ok();
         });
 
     });

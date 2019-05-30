@@ -417,6 +417,38 @@ class ElasticService {
             })
         ;
     }
+
+    /**
+     * Updates the index template and creates the index based on the template if desired
+     * @param {{ template_name:string, index_patterns:[string], template:*, index:{name:string}}} indexConfig
+     * @param {boolean} doCreate – Whether to create the index if it does not exist
+     * @param createSchema – Optional create index body, so you can override template settings (e.g. {settings:{number_of_shards:42}}). Defaults to `null`
+     * @returns {Promise<boolean>}
+     */
+    ensureTemplatedIndex(indexConfig, doCreate, createSchema=null) {
+        const { template_name, index_patterns, template, index } = indexConfig;
+        const { name } = index;
+
+        return this
+            .putTemplate(template_name, index_patterns, template)
+            .then(() => {
+                if (doCreate) {
+                    return this
+                        .exists({ index: name })
+                        .then(exists => {
+                            if (!exists) {
+                                return this.create({ index: name, schema: createSchema }) // from template
+                            } else {
+                                return Promise.resolve(exists);
+                            }
+                        })
+                    ;
+                } else {
+                    return Promise.resolve(true);
+                }
+            })
+        ;
+    }
 }
 
 module.exports = ElasticService;

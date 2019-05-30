@@ -17,6 +17,7 @@ module.exports = {
         example: {
             // template_name: 'example_template',
             // index_patterns: ["example_things*"],
+            // template: require('./indicies/foods'),
             index: {
                 name: 'example-foods',
                 schema: require('./indicies/foods'),

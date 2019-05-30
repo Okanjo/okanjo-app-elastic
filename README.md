@@ -125,6 +125,15 @@ Creates or updates an index template.
 * `name` – Template name to delete
 * `options.*` – Additional deleteTemplate request options
 
+### `elastic.ensureTemplatedIndex(indexConfig, doCreate, [createSchema])`
+* `indexConfig` – Typical index configuration object
+  * `indexConfig.template_name` – Name of the template
+  * `indexConfig.index_patterns` - Array of the index patterns the template applies to
+  * `indexConfig.template` – The index mappings and settings template
+  * `indexConfig.index.name` – The name of the index to create
+* `doCreate` - When truthy, the index will be created if not already present
+* `createSchema` – Optional. Override the template mappings and settings, if desired. Defaults to `null` to inherit the template mappings and settings. Use this for overriding stuff like shard counts, e.g. `{ settings: { number_of_shards: 10 } }`
+
  
 ### Not Implemented?
 Is your elastic client function missing? No problem. 

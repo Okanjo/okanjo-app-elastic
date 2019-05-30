@@ -14,6 +14,7 @@ module.exports = {
         unit_test_index: {
             template_name: 'unit_test_template',
             index_patterns: ["unit_test_things*"],
+            template: require('./test_schema_template'),
             index: {
                 name: 'unit_test',
                 schema: require('./test_schema'),
