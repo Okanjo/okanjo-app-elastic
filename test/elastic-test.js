@@ -1,9 +1,9 @@
-const should = require('should'),
-    Async = require('async');
+const should = require('should');
 
 describe('ElasticService', () => {
 
     const ElasticService = require('../ElasticService');
+    const { Client } = require('@elastic/elasticsearch');
     const OkanjoApp = require('okanjo-app');
     const config = require('./config');
 
@@ -15,7 +15,6 @@ describe('ElasticService', () => {
      */
     let app;
 
-
     // Init
     before(function(done) {
 
@@ -24,370 +23,62 @@ describe('ElasticService', () => {
 
         // Add the redis service to the app
         app.services = {
-            elastic: new ElasticService(app),
-            elastic_better: new ElasticService(
-                app,
-                app.copy({}, app.config.elasticsearch_default_cluster),
-                app.config.elastic_unit_test_index.index
-            )
+            elastic: new ElasticService(app, config.elasticsearch.client, config.elasticsearch.unit_test_index.index),
+            // elastic_better: new ElasticService(
+            //     app,
+            //     app.copy({}, app.config.elasticsearch_default_cluster),
+            //     app.config.elastic_unit_test_index.index
+            // )
         };
 
-        app.connectToServices(() => {
-            app.services.elastic.delete(() => {
-                // disrgard error - we don't care we just want it gone
-
-                // remove template-built-index too
-                app.services.elastic.client.indices.delete({
-                    index: 'unit_test_things_1'
-                }, () => {
-                    // disrgard error - we don't care we just want it gone
-
-                    app.services.elastic.deleteTemplate(app.config.elastic_unit_test_index.template_name, () => {
-                        // disrgard error - we don't care we just want it gone
-                        done();
-                    });
-                });
+        app.connectToServices().then(async() => {
+            await app.services.elastic.delete(); // main index
+            await app.services.elastic.delete({ // remove template-built-index too
+                index: 'unit_test_things_1'
             });
-        });
-    });
-
-
-    it('should be bound to app', function() {
-        app.services.elastic.should.be.an.Object();
-        app.services.elastic.should.be.instanceof(ElasticService);
-    });
-
-    it('ping', (done) => {
-        app.services.elastic.ping((err) => {
-            should(err).not.be.ok();
-            done();
-        })
-    });
-
-    it('flatten flattens!', () => {
-
-        ElasticService.flattenProps('manager', {
-            "properties": {
-                "age":  { "type": "integer" },
-                "name": {
-                    "properties": {
-                        "first": { "type": "text" },
-                        "last":  { "type": "text" }
-                    }
-                }
-            }
-        }).should.deepEqual({
-            "manager.age": {"type":"integer"},
-            "manager.name.first":{"type":"text"},
-            "manager.name.last":{"type":"text"}
-        });
-
-    });
-
-    it('works with the better config structure', (done) => {
-
-        app.services.elastic_better.ping((err) => {
-            should(err).not.be.ok();
+            await app.services.elastic.deleteTemplate(app.config.elasticsearch.unit_test_index.template_name);
             done();
         });
-
     });
 
-    describe('ensure', () => {
-        it('works', (done) => {
-            Async.waterfall([
-                // first check should create the index
-                (next) => {
-                    app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                        should(err).not.be.ok();
+    describe('Basic operations', () => {
 
-                        consistent.should.be.exactly(true);
-                        created.should.be.exactly(true);
-                        settings.should.be.exactly(true);
-                        mappings.should.be.exactly(true);
-
-                        next();
-                    });
-                },
-
-                // a second call should still be consistent but not created
-                (next) => {
-                    app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                        should(err).not.be.ok();
-
-                        consistent.should.be.exactly(true);
-                        created.should.be.exactly(false);
-                        settings.should.be.exactly(true);
-                        mappings.should.be.exactly(true);
-
-                        next();
-                    });
-                },
-
-                // ensure it was actually created
-                // use the client because we don't want the helper
-                // to create it if it didn't get created
-                (next) => {
-                    app.services.elastic.client.indices.get({
-                        index: app.services.elastic.index
-                    }, (err) => {
-                        should(err).not.be.ok();
-
-                        next();
-                    });
-                },
-
-                //verify it exists via helper
-                (next) => {
-                    app.services.elastic.exists((err, exists) => {
-                        should(err).not.be.ok();
-                        should(exists).be.exactly(true);
-                        next();
-                    });
-                }
-            ], done);
+        it('should be bound to app', function() {
+            app.services.elastic.should.be.an.Object();
+            app.services.elastic.should.be.instanceof(ElasticService);
         });
 
-        it('should add new mappings', (done) => {
-
-            // Put a new field in the schema
-            app.services.elastic.schema.mappings.my_thing.properties.is_new = {
-                type: "boolean",
-                //include_in_all: false
-            };
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                consistent.should.be.exactly(true);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(true);
-
-                app.services.elastic.getMappings((err, res) => {
-                    should(err).not.be.ok();
-                    should(res[app.services.elastic.index].mappings.my_thing.properties.is_new).be.an.Object();
-                    done();
-                });
-            });
+        it('can create service given existing client', () => {
+            const service = new ElasticService(app, app.services.elastic.client, config.elasticsearch.unit_test_index.index);
+            should(service).be.ok();
+            should(service.client).be.instanceOf(Client);
         });
 
-        // it('should add new types', (done) => {
-        //
-        //     // Put a new type in the schema
-        //     app.services.elastic.types.my_thing2 = "my_thing2";
-        //     app.services.elastic.schema.mappings.my_thing2 = {
-        //         properties: {
-        //             new: {
-        //                 type: "boolean",
-        //                 //include_in_all: false
-        //             },
-        //             my_bool: {
-        //                 type: "boolean",
-        //                 //include_in_all: false
-        //             },
-        //             category: {
-        //                 type: "text",
-        //                 analyzer: "snowball",
-        //                 fields: {
-        //                     raw: {
-        //                         type: "keyword"
-        //                     },
-        //                     lowered: {
-        //                         type: "text",
-        //                         analyzer: "lowercase_only"
-        //                     }
-        //                 }
-        //             },
-        //             name: {
-        //                 type: "text",
-        //                 analyzer: "html_snowball",
-        //                 //include_in_all: true
-        //             }
-        //         }
-        //     };
-        //
-        //     app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-        //         should(err).not.be.ok();
-        //
-        //         consistent.should.be.exactly(true);
-        //         created.should.be.exactly(false);
-        //         settings.should.be.exactly(true);
-        //         mappings.should.be.exactly(true);
-        //
-        //         app.services.elastic.getMappings((err, res) => {
-        //             should(err).not.be.ok();
-        //             should(res[app.services.elastic.index].mappings.my_thing2).be.an.Object();
-        //             done();
-        //         });
-        //     });
-        // });
-
-        it('should add new analyzers', (done) => {
-
-            // Put a new type in the schema
-            app.services.elastic.schema.settings.analysis.analyzer.lowercase_only2 = {
-                type: "custom",
-                char_filter: [],
-                tokenizer: "keyword",
-                filter: ["lowercase"]
-            };
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                consistent.should.be.exactly(true);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(true);
-
-                app.services.elastic.getSettings((err, res) => {
-                    should(err).not.be.ok();
-                    should(res[app.services.elastic.index].settings.index.analysis.analyzer.lowercase_only2).be.an.Object();
-                    done();
-                });
-            });
+        it('should throw if you do not provide a config', () => {
+            (() => {
+                new ElasticService(app);
+            }).should.throw(/configuration/);
         });
 
-        it('should add new dynamic templates', (done) => {
-
-            // Put a new dynamic template in the schema
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates = [];
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.push({
-                category_names: {
-                    match: "category_name_*",
-                    match_mapping_type: "string",
-                    mapping: {
-                        type: "keyword",
-                        //include_in_all: false
-                    }
-                }
-            });
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                consistent.should.be.exactly(true);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(true);
-
-                app.services.elastic.getMappings((err, res) => {
-                    should(err).not.be.ok();
-                    should(res[app.services.elastic.index].mappings.my_thing.dynamic_templates).be.an.Array();
-                    res[app.services.elastic.index].mappings.my_thing.dynamic_templates.length.should.be.exactly(1);
-                    res[app.services.elastic.index].mappings.my_thing.dynamic_templates[0].category_names.should.be.an.Object();
-                    done();
-                });
-            });
+        it('should throw if you do not provide an index config', () => {
+            (() => {
+                new ElasticService(app, config.elasticsearch.client);
+            }).should.throw(/configuration/);
         });
 
-        it('should add new dynamic templates with multiple fields', (done) => {
-
-            // Put a new dynamic template in the schema
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.push({
-                my_categories: {
-                    match: "category_*",
-                    match_mapping_type: "string",
-                    mapping: {
-                        type: "text",
-                        analyzer: "snowball",
-                        fields: {
-                            raw: {
-                                type: "keyword"
-                            }
-                        }
-                    }
-                }
-            });
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                consistent.should.be.exactly(true);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(true);
-
-                app.services.elastic.getMappings((err, res) => {
-                    should(err).not.be.ok();
-                    should(res[app.services.elastic.index].mappings.my_thing.dynamic_templates).be.an.Array();
-                    res[app.services.elastic.index].mappings.my_thing.dynamic_templates.length.should.be.exactly(2);
-                    res[app.services.elastic.index].mappings.my_thing.dynamic_templates[1].my_categories.should.be.an.Object();
-                    done();
-                });
-            });
+        it('ping', async () => {
+            const res = await app.services.elastic.ping();
+            should(res).be.ok();
         });
 
-        it('should handle edge cases with existing fields and dynamic templates', () => {
+        it('exists', async () => {
+            const res = await app.services.elastic.exists();
+            should(res).not.be.ok();
+        });
 
-            // set 1
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.push({
-                test: {
-                    path_match: 'test_*',
-                    path_unmatch: 'test_nope_*',
-                    match_mapping_type: 'string'
-                }
-            });
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'test_prop', { type: 'text' }).should.be.exactly(true);
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'test_nope_exclude_me', { type: 'text' }).should.be.exactly(false);
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'test_wrong_type', { type: 'boolean' }).should.be.exactly(false);
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'not_applicable', { type: 'keyword' }).should.be.exactly(false);
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.pop();
+        it('flatten flattens!', () => {
 
-            // set 2
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.push({
-                test: {
-                    match: 'test_*',
-                    unmatch: 'test_nope_*'
-                }
-            });
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'test_prop', { type: 'text' }).should.be.exactly(true);
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'test_nope_exclude_me', { type: 'text' }).should.be.exactly(false);
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'not_applicable', { type: 'keyword' }).should.be.exactly(false);
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.pop();
-
-            // set 3
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.push({
-                test: {
-                    match: '^test_[a-zA-Z]+_.*$',
-                    match_pattern: 'regex',
-                    match_mapping_type: 'boolean'
-                }
-            });
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'test_prop_1', { type: 'boolean' }).should.be.exactly(true);
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'test-does-not-match', { type: 'boolean' }).should.be.exactly(false);
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'test_wrong_type', { type: 'long' }).should.be.exactly(false);
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.pop();
-
-
-            // set 4
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.push({
-                test: {
-                    match_mapping_type: '*'
-                }
-            });
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'prop', { type: 'boolean' }).should.be.exactly(true);
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.pop();
-
-            // set 5
-            const temp = app.services.elastic.schema.mappings.my_thing.dynamic_templates;
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates = undefined;
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'prop', { type: 'boolean' }).should.be.exactly(false);
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates = temp;
-
-
-            // set 6
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.push({
-                "full_name": {
-                    "path_match":   "manager.name.*",
-                    "mapping": {
-                        "type":       "text",
-                        "copy_to":    "full_name"
-                    }
-                }
-            });
-            app.services.elastic._isThisPerhapsADynamicField('my_thing', 'manager', {
+            ElasticService.flattenProps('manager', {
                 "properties": {
                     "age":  { "type": "integer" },
                     "name": {
@@ -397,276 +88,118 @@ describe('ElasticService', () => {
                         }
                     }
                 }
-            }).should.be.exactly(true);
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates.pop();
+            }).should.deepEqual({
+                "manager.age": {"type":"integer"},
+                "manager.name.first":{"type":"text"},
+                "manager.name.last":{"type":"text"}
+            });
+
         });
 
-        it('should warn when mappings change', (done) => {
-            // app.services.elastic.schema.mappings.my_thing.properties.some_url.include_in_all = true;
-            app.services.elastic.schema.mappings.my_thing.properties.is_new.type = "double";
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
+    });
 
-                // Revert
-                app.services.elastic.schema.mappings.my_thing.properties.is_new.type = "boolean";
-                // app.services.elastic.schema.mappings.my_thing.properties.some_url.include_in_all = false;
+    describe('templates', () => {
 
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
+        //should add a template
+        before(async () => {
+            const template = JSON.parse(origTemplate);
+            const { statusCode, body } = await app.services.elastic.putTemplate(
+                app.config.elasticsearch.unit_test_index.template_name,
+                app.config.elasticsearch.unit_test_index.index_patterns,
+                template
+            );
 
-                done();
-            });
+            body.acknowledged.should.be.exactly(true);
+            statusCode.should.be.exactly(200);
         });
 
-        it('should warn when `long` mappings change', (done) => {
-            app.services.elastic.schema.mappings.my_thing.properties.atom.index = "no";
-            app.services.elastic.schema.mappings.my_thing.properties.atom2.index = false;
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                app.services.elastic.schema.mappings.my_thing.properties.atom.index = "not_analyzed";
-                app.services.elastic.schema.mappings.my_thing.properties.atom2.index = "not_analyzed";
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
-            });
+        // should delete a template
+        after(async () => {
+            const { statusCode, body } = await app.services.elastic.deleteTemplate(app.config.elasticsearch.unit_test_index.template_name);
+            body.acknowledged.should.be.exactly(true);
+            statusCode.should.be.exactly(200);
         });
 
-        it('should warn when multi-field mappings change', (done) => {
-            // app.services.elastic.schema.mappings.my_thing.properties.category.include_in_all = true;
-            app.services.elastic.schema.mappings.my_thing.properties.category.fields.lowered.analyzer = "lowercase_only2";
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                // app.services.elastic.schema.mappings.my_thing.properties.category.include_in_all = false;
-                app.services.elastic.schema.mappings.my_thing.properties.category.fields.lowered.analyzer = "lowercase_only";
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
-            });
+        it('should update a template', async () => {
+            const template = JSON.parse(origTemplate);
+            template.mappings.my_thing.properties.new_prop = { type: "long" };
+            const { statusCode, body } = await app.services.elastic.putTemplate(
+                app.config.elasticsearch.unit_test_index.template_name,
+                app.config.elasticsearch.unit_test_index.index_patterns,
+                template,
+                { create: false }
+            );
+            body.acknowledged.should.be.exactly(true);
+            statusCode.should.be.exactly(200);
         });
 
-        it('should warn when multi-field gets a new field', (done) => {
-            app.services.elastic.schema.mappings.my_thing.properties.category.fields.lowered2 = app.services.elastic.schema.mappings.my_thing.properties.category.fields.lowered;
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                const fields = app.services.elastic.schema.mappings.my_thing.properties.category.fields;
-                delete fields.lowered2;
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
+        it('should create an index from a template', async () => {
+            let success = await app.services.elastic.create({
+                index: 'unit_test_things_1',
+                schema: null // don't use the configured mappings
             });
-        });
+            should(success).be.ok();
 
-        it('should warn when multi-field loses a field', (done) => {
-            const original = app.services.elastic.schema.mappings.my_thing.properties.category.fields.lowered;
-            const fields = app.services.elastic.schema.mappings.my_thing.properties.category.fields;
-            delete fields.lowered;
+            // exists?
+            success = await app.services.elastic.exists({ index: 'unit_test_things_1' });
+            should(success).be.ok();
 
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                app.services.elastic.schema.mappings.my_thing.properties.category.fields.lowered = original;
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
+            // get mappings to verify
+            let res = await app.services.elastic.getMappings({
+                index: 'unit_test_things_1'
             });
-        });
+            should(res.body).be.ok();
+            should(res.statusCode).be.exactly(200);
+            res.body.unit_test_things_1.mappings.my_thing.properties.atom.type.should.be.exactly('long');
 
-        it('should warn when a property becomes a multi-field', (done) => {
-            app.services.elastic.schema.mappings.my_thing.properties.condition.fields = {
-                analyzed: {
-                    type: "text",
-                    analyzer: "snowball"
-                }
-            };
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                const prop = app.services.elastic.schema.mappings.my_thing.properties.condition;
-                delete prop.fields;
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
+            // verify settings
+            res = await app.services.elastic.getSettings({
+                index: 'unit_test_things_1'
             });
-        });
+            should(res.body).be.ok();
+            should(res.statusCode).be.exactly(200);
+            res.body.unit_test_things_1.settings.index.number_of_shards.should.be.exactly('2');
 
-        it('should warn when dynamic templates change', (done) => {
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates[0].category_names.match = "category_name__*";
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                app.services.elastic.schema.mappings.my_thing.dynamic_templates[0].category_names.match = "category_name_*";
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
+            // delete the test templated index
+            success = await app.services.elastic.delete({
+                index: 'unit_test_things_1'
             });
-        });
-
-        it('should warn when dynamic template fields change', (done) => {
-            app.services.elastic.schema.mappings.my_thing.dynamic_templates[1].my_categories.mapping.fields.raw.type = "boolean";
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                app.services.elastic.schema.mappings.my_thing.dynamic_templates[1].my_categories.mapping.fields.raw.type = "keyword";
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
-            });
-        });
-
-        it('should warn when analyzers change', (done) => {
-            app.services.elastic.schema.settings.analysis.analyzer.lowercase_only2.char_filter = ["html_strip"];
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                app.services.elastic.schema.settings.analysis.analyzer.lowercase_only2.char_filter = [];
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(false);
-                mappings.should.be.exactly(true);
-
-                done();
-            });
-        });
-
-        it('should warn when mappings are removed', (done) => {
-            const original = app.services.elastic.schema.mappings.my_thing.properties.is_new;
-            const props = app.services.elastic.schema.mappings.my_thing.properties;
-            delete props.is_new;
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                app.services.elastic.schema.mappings.my_thing.properties.is_new = original;
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
-            });
-        });
-
-        //
-        // it('should warn when types are removed', (done) => {
-        //     const original = app.services.elastic.schema.mappings.my_thing2;
-        //     const mappings = app.services.elastic.schema.mappings;
-        //     delete mappings.my_thing2;
-        //
-        //     app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-        //         should(err).not.be.ok();
-        //
-        //         // Revert
-        //         app.services.elastic.schema.mappings.my_thing2 = original;
-        //
-        //         consistent.should.be.exactly(false);
-        //         created.should.be.exactly(false);
-        //         settings.should.be.exactly(true);
-        //         mappings.should.be.exactly(false);
-        //
-        //         done();
-        //     });
-        // });
-
-        it('should warn when analyzers are removed', (done) => {
-            const original = app.services.elastic.schema.settings.analysis.analyzer.lowercase_only2;
-            const analyzer = app.services.elastic.schema.settings.analysis.analyzer;
-            delete analyzer.lowercase_only2;
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                app.services.elastic.schema.settings.analysis.analyzer.lowercase_only2 = original;
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(false);
-                mappings.should.be.exactly(true);
-
-                done();
-            });
-        });
-
-        it('should warn when dynamic templates are removed', (done) => {
-            const original = app.services.elastic.schema.mappings.my_thing.dynamic_templates.pop();
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                // Revert
-                app.services.elastic.schema.mappings.my_thing.dynamic_templates.push(original);
-
-                consistent.should.be.exactly(false);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(false);
-
-                done();
-            });
-        });
-
-        it('should still ensure with no problems after all the bad things', (done) => {
-
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                consistent.should.be.exactly(true);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(true);
-
-                done();
-            });
+            success.should.be.ok();
         });
 
     });
 
     describe('bulk', () => {
 
-        it('should work', (done) => {
+        before(async function() {
+            this.timeout(2000);
+
+            // Create index
+            const success = await app.services.elastic.create();
+            should(success).be.ok();
+
+            // get mappings to verify
+            let res = await app.services.elastic.getMappings();
+            should(res.body).be.ok();
+            should(res.statusCode).be.exactly(200);
+            res.body.unit_test.mappings.my_thing.properties.atom.type.should.be.exactly('long');
+
+            // verify settings
+            res = await app.services.elastic.getSettings();
+            should(res.body).be.ok();
+            should(res.statusCode).be.exactly(200);
+            res.body.unit_test.settings.index.number_of_shards.should.be.exactly('2');
+        });
+
+        after(async() => {
+            // Delete index
+            const success = await app.services.elastic.delete();
+            should(success).be.ok();
+        });
+
+
+        // noinspection JSAccessibilityCheck
+        it('should work', async () => {
             const body = [
                 { index: { _id: "doc1" } },
                 {
@@ -704,16 +237,14 @@ describe('ElasticService', () => {
                 type: app.services.elastic.types.my_thing
             };
 
-            app.services.elastic.bulk(body, options, (err, res, status) => {
-                should(err).not.be.ok();
-                should(res).be.an.Object();
-                should(status).be.exactly(200);
+            const res = await app.services.elastic.bulk(body, options);
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
 
-                done();
-            });
         }).timeout(2000);
 
-        it('should work without options', (done) => {
+        // noinspection JSAccessibilityCheck
+        it('should work without options', async () => {
             const body = [
                 { index: { _id: "doc3", _type: app.services.elastic.types.my_thing } },
                 {
@@ -730,359 +261,312 @@ describe('ElasticService', () => {
                 }
             ];
 
-            app.services.elastic.bulk(body, (err, res, status) => {
-                should(err).not.be.ok();
-                should(res).be.an.Object();
-                should(status).be.exactly(200);
-
-                done();
-            });
+            const res = await app.services.elastic.bulk(body);
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
         }).timeout(2000);
-
-        it('should ensure without complaining about missing fields', (done) => {
-            app.services.elastic.ensure((err, consistent, created, settings, mappings) => {
-                should(err).not.be.ok();
-
-                consistent.should.be.exactly(true);
-                created.should.be.exactly(false);
-                settings.should.be.exactly(true);
-                mappings.should.be.exactly(true);
-
-                done();
-            });
-        })
 
     });
 
     describe('search', () => {
-        it('works without anything', (done) => {
-            app.services.elastic.search({}, {}, (err, res, status) => {
 
-                should(err).not.be.ok();
-                should(res).be.an.Object();
-                should(status).be.exactly(200);
+        before(async function() {
+            this.timeout(2000);
 
-                done();
-            });
+            // Create index
+            const success = await app.services.elastic.create();
+            should(success).be.ok();
+
+            // Index some docs
+            const body = [
+                { index: { _id: "doc1", _type: app.services.elastic.types.my_thing } },
+                {
+                    my_bool: false,
+                    category: "Nope",
+                    name: "A Cool my_thing",
+
+                    // category_names
+                    category_name_0: "Home",
+                    category_name_1: "Garden",
+
+                    // my_categories
+                    category_0: "Poop",
+                    category_1: "Mouth"
+
+                },
+
+                { index: { _id: "doc2", _type: app.services.elastic.types.my_thing } },
+                {
+                    my_bool: true,
+                    category: "Yup",
+                    name: "A Not Cool my_thing",
+
+                    // category_names
+                    category_name_0: "Home",
+                    category_name_1: "Office",
+
+                    // my_categories
+                    category_0: "Poop",
+                    category_1: "Face"
+                },
+
+                { index: { _id: "doc3", _type: app.services.elastic.types.my_thing } },
+                {
+                    my_bool: false,
+                    category: "Nope",
+                    name: "A Cool my_thing"
+                },
+
+                { index: { _id: "doc4", _type: app.services.elastic.types.my_thing } },
+                {
+                    my_bool: true,
+                    category: "Yup",
+                    name: "A Not Cool my_thing"
+                }
+            ];
+
+            const res = await app.services.elastic.bulk(body);
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
         });
 
-        it('returns everything we indexed', (done) => {
-            app.services.elastic.search({
+        after(async() => {
+            // Delete index
+            const success = await app.services.elastic.delete();
+            should(success).be.ok();
+        });
+
+        it('works without anything', async () => {
+            const res = await app.services.elastic.search();
+            should(res.statusCode).be.exactly(200);
+            should(res.body).be.ok()
+        });
+
+        it('returns everything we indexed', async () => {
+            const res = await app.services.elastic.search({
                 "query": {
                     "match_all": {}
                 }
-            }, (err, res, status) => {
-
-
-                should(err).not.be.ok();
-                should(res).be.an.Object();
-                should(status).be.exactly(200);
-
-                should(res.hits.total).be.exactly(4);
-
-                done();
             });
+
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
+
+            should(res.body.hits.total).be.exactly(4);
         });
 
-        it('returns everything we indexed with options', (done) => {
-            app.services.elastic.search(
+        it('returns everything we indexed with options', async () => {
+            const res = await app.services.elastic.search(
                 {
                     "query": {
                         "match_all": {}
                     }
                 },
-                { type: app.services.elastic.types.my_thing },
-                (err, res, status) => {
+                { type: app.services.elastic.types.my_thing }
+            );
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
 
-
-                should(err).not.be.ok();
-                should(res).be.an.Object();
-                should(status).be.exactly(200);
-
-                should(res.hits.total).be.exactly(4); // since types are dead we get 4 instead of 2
-
-                done();
-            });
+            should(res.body.hits.total).be.exactly(4); // since types are dead we get 4 instead of 2
         });
     });
 
     describe('scroll', () => {
 
-        it('scrolls through all records', (done) => {
+        before(async function() {
+            this.timeout(2000);
+
+            // Create index
+            const success = await app.services.elastic.create();
+            should(success).be.ok();
+
+            // Index some docs
+            const body = [
+                { index: { _id: "doc1", _type: app.services.elastic.types.my_thing } },
+                {
+                    my_bool: false,
+                    category: "Nope",
+                    name: "A Cool my_thing",
+
+                    // category_names
+                    category_name_0: "Home",
+                    category_name_1: "Garden",
+
+                    // my_categories
+                    category_0: "Poop",
+                    category_1: "Mouth"
+
+                },
+
+                { index: { _id: "doc2", _type: app.services.elastic.types.my_thing } },
+                {
+                    my_bool: true,
+                    category: "Yup",
+                    name: "A Not Cool my_thing",
+
+                    // category_names
+                    category_name_0: "Home",
+                    category_name_1: "Office",
+
+                    // my_categories
+                    category_0: "Poop",
+                    category_1: "Face"
+                },
+
+                { index: { _id: "doc3", _type: app.services.elastic.types.my_thing } },
+                {
+                    my_bool: false,
+                    category: "Nope",
+                    name: "A Cool my_thing"
+                },
+
+                { index: { _id: "doc4", _type: app.services.elastic.types.my_thing } },
+                {
+                    my_bool: true,
+                    category: "Yup",
+                    name: "A Not Cool my_thing"
+                }
+            ];
+
+            const res = await app.services.elastic.bulk(body);
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
+        });
+
+        after(async() => {
+            // Delete index
+            const success = await app.services.elastic.delete();
+            should(success).be.ok();
+        });
+
+        it('scrolls through all records', async () => {
             const ids = new Set();
-            Async.waterfall([
 
                 // Search -> 1
-                (next) => {
-                    app.services.elastic.search(
-                        {
-                            query: {
-                                match_all: {}
-                            },
-                            size: 1 // one at a time
-                        },
-                        { scroll: '1m' }, // Ask for a scroll id
-                        (err, res, status) => {
-
-                            should(err).not.be.ok();
-                            should(res).be.an.Object();
-                            should(status).be.exactly(200);
-
-                            should(res._scroll_id).be.a.String();
-
-                            should(res.hits.total).be.exactly(4);
-                            should(res.hits.hits.length).be.exactly(1);
-
-                            ids.add(res.hits.hits[0]._id);
-
-                            next(null, res._scroll_id);
-                        }
-                    );
+            let res = await app.services.elastic.search(
+                {
+                    query: {
+                        match_all: {}
+                    },
+                    size: 1 // one at a time
                 },
+                { scroll: '1m' } // Ask for a scroll id
+            );
 
-                // Scroll -> 2
-                (scroll_id, next) => {
-                    app.services.elastic.scroll(
-                        scroll_id,
-                        //{ scroll: '1m' }, // let it use the default option set
-                        (err, res, status) => {
-                            should(err).not.be.ok();
-                            should(res).be.an.Object();
-                            should(status).be.exactly(200);
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
 
-                            should(res._scroll_id).be.a.String();
+            should(res.body._scroll_id).be.a.String();
+            let scroll_id = res.body._scroll_id;
 
-                            should(res.hits.total).be.exactly(4);
-                            should(res.hits.hits.length).be.exactly(1);
+            should(res.body.hits.total).be.exactly(4);
+            should(res.body.hits.hits.length).be.exactly(1);
 
-                            ids.has(res.hits.hits[0]._id).should.be.exactly(false);
-                            ids.add(res.hits.hits[0]._id);
+            ids.add(res.body.hits.hits[0]._id);
 
-                            next(null, res._scroll_id);
-                        }
-                    );
-                },
+            // Scroll -> 2
+            res = await app.services.elastic.scroll(scroll_id); // let it use the default option set
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
 
-                // Scroll -> 3
-                (scroll_id, next) => {
-                    app.services.elastic.scroll(
-                        scroll_id,
-                        { scroll: '1m' }, // Ask for a scroll id
-                        (err, res, status) => {
+            should(res.body._scroll_id).be.a.String();
+            scroll_id = res.body._scroll_id;
 
-                            should(err).not.be.ok();
-                            should(res).be.an.Object();
-                            should(status).be.exactly(200);
+            should(res.body.hits.total).be.exactly(4);
+            should(res.body.hits.hits.length).be.exactly(1);
 
-                            should(res._scroll_id).be.a.String();
+            ids.has(res.body.hits.hits[0]._id).should.be.exactly(false);
+            ids.add(res.body.hits.hits[0]._id);
 
-                            should(res.hits.total).be.exactly(4);
-                            should(res.hits.hits.length).be.exactly(1);
+            // Scroll -> 3
+            res = await app.services.elastic.scroll(scroll_id, { scroll: '1m' }); // Ask for a scroll id
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
 
-                            ids.has(res.hits.hits[0]._id).should.be.exactly(false);
-                            ids.add(res.hits.hits[0]._id);
+            should(res.body._scroll_id).be.a.String();
+            scroll_id = res.body._scroll_id;
 
-                            next(null, res._scroll_id);
-                        }
-                    );
-                },
+            should(res.body.hits.total).be.exactly(4);
+            should(res.body.hits.hits.length).be.exactly(1);
 
-                // Scroll -> 4
-                (scroll_id, next) => {
-                    app.services.elastic.scroll(
-                        scroll_id,
-                        { scroll: '1m' }, // Ask for a scroll id
-                        (err, res, status) => {
+            ids.has(res.body.hits.hits[0]._id).should.be.exactly(false);
+            ids.add(res.body.hits.hits[0]._id);
 
-                            should(err).not.be.ok();
-                            should(res).be.an.Object();
-                            should(status).be.exactly(200);
+            // Scroll -> 4
+            res = await app.services.elastic.scroll(scroll_id,{ scroll: '1m' }); // Ask for a scroll id
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
 
-                            should(res._scroll_id).be.a.String();
+            should(res.body._scroll_id).be.a.String();
+            scroll_id = res.body._scroll_id;
 
-                            should(res.hits.total).be.exactly(4);
-                            should(res.hits.hits.length).be.exactly(1);
+            should(res.body.hits.total).be.exactly(4);
+            should(res.body.hits.hits.length).be.exactly(1);
 
-                            ids.has(res.hits.hits[0]._id).should.be.exactly(false);
-                            ids.add(res.hits.hits[0]._id);
+            ids.has(res.body.hits.hits[0]._id).should.be.exactly(false);
+            ids.add(res.body.hits.hits[0]._id);
 
-                            next(null, res._scroll_id);
-                        }
-                    );
-                },
-
-                // Clear Scroll
-                (scroll_id, next) => {
-                    app.services.elastic.clearScroll(scroll_id, (err, res, status) => {
-
-                        should(err).not.be.ok();
-                        should(res).be.an.Object();
-                        should(status).be.exactly(200);
-
-                        next(null);
-                    });
-                }
-
-            ], done)
+            // Clear Scroll
+            res = await app.services.elastic.clearScroll(scroll_id);
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
         });
 
     });
 
     describe('get', () => {
-        it('works', (done) => {
-            app.services.elastic.get('doc1', (err, res, status) => {
-                should(err).not.be.ok();
-                should(res).be.an.Object();
-                should(status).be.exactly(200);
 
-                done();
-            });
-        });
+        before(async function() {
+            this.timeout(2000);
 
-        it('works with a type', (done) => {
-            app.services.elastic.get('doc1', { type: app.services.elastic.types.my_thing }, (err, res, status) => {
-                should(err).not.be.ok();
-                should(res).be.an.Object();
-                should(status).be.exactly(200);
+            // Create index
+            const success = await app.services.elastic.create();
+            should(success).be.ok();
 
-                done();
-            });
-        });
+            // Index some docs
+            const body = [
+                { index: { _id: "doc1", _type: app.services.elastic.types.my_thing } },
+                {
+                    my_bool: false,
+                    category: "Nope",
+                    name: "A Cool my_thing",
 
-        it('works with a type by not returning docs', (done) => {
-            app.services.elastic.get('doc1', { type: "my_thing2" }, (err, res, status) => {
-                should(err).not.be.ok();
-                should(res).be.exactly(null);
-                should(status).be.exactly(404);
+                    // category_names
+                    category_name_0: "Home",
+                    category_name_1: "Garden",
 
-                done();
-            });
-        });
-    });
+                    // my_categories
+                    category_0: "Poop",
+                    category_1: "Mouth"
 
-    describe('delete', () => {
-        it('works', (done) => {
-            Async.waterfall([
-                // drop the index
-                (next) => {
-                    app.services.elastic.delete((err, success) => {
-                        should(err).not.be.ok();
-                        should(success).be.exactly(true);
-                        next();
-                    })
-                },
-
-                // ensure it was actually deleted
-                (next) => {
-                    app.services.elastic.client.indices.get({
-                        index: app.services.elastic.index
-                    }, (err, res) => {
-                        err.should.be.ok();
-
-                        res.should.be.an.Object();
-                        res.error.should.be.an.Object();
-                        res.error.reason.should.be.equal('no such index');
-
-                        next();
-                    });
                 }
-            ], done);
-        });
-    });
+            ];
 
-    describe('templates', () => {
-
-        it('should add a template', (done) => {
-            const template = JSON.parse(origTemplate);
-            app.services.elastic.putTemplate(
-                app.config.elastic_unit_test_index.template_name,
-                app.config.elastic_unit_test_index.index_patterns,
-                template,
-                (err, res, status) => {
-
-                    should(err).not.be.ok();
-                    res.acknowledged.should.be.exactly(true);
-                    status.should.be.exactly(200);
-
-                    done();
-                }
-            );
+            const res = await app.services.elastic.bulk(body);
+            should(res.body).be.an.Object();
+            should(res.statusCode).be.exactly(200);
         });
 
-        it('should update a template', (done) => {
-            const template = JSON.parse(origTemplate);
-            template.mappings.my_thing.properties.new_prop = { type: "long" };
-            app.services.elastic.putTemplate(
-                app.config.elastic_unit_test_index.template_name,
-                app.config.elastic_unit_test_index.index_patterns,
-                template,
-                { create: false },
-                (err, res, status) => {
-
-                    should(err).not.be.ok();
-                    res.acknowledged.should.be.exactly(true);
-                    status.should.be.exactly(200);
-
-                    done();
-                }
-            );
+        after(async() => {
+            // Delete index
+            const success = await app.services.elastic.delete();
+            should(success).be.ok();
         });
 
-        it('should create an index from a template', (done) => {
-            app.services.elastic.create({
-                index: 'unit_test_things_1',
-                schema: null // don't use the configured mappings
-            }, (err, success, res) => {
-                should(err).not.be.ok();
-                should(success).be.ok();
-                res.acknowledged.should.be.exactly(true);
-
-                // get mappings to verify
-                app.services.elastic.client.indices.getMapping({
-                    index: 'unit_test_things_1'
-                }, (err, res, status) => {
-                    should(err).not.be.ok();
-                    should(res).be.ok();
-                    should(status).be.exactly(200);
-
-                    res.unit_test_things_1.mappings.my_thing.properties.atom.type.should.be.exactly('long');
-
-                    // verify settings
-                    app.services.elastic.client.indices.getSettings({
-                        index: 'unit_test_things_1'
-                    }, (err, res, status) => {
-                        should(err).not.be.ok();
-                        should(res).be.ok();
-                        should(status).be.exactly(200);
-
-                        res.unit_test_things_1.settings.index.number_of_shards.should.be.exactly('2');
-
-                        // delete the test templated index
-                        app.services.elastic.client.indices.delete({
-                            index: 'unit_test_things_1'
-                        }, (err, res, status) => {
-                            should(err).not.be.ok();
-                            res.acknowledged.should.be.exactly(true);
-                            status.should.be.exactly(200);
-
-                            done();
-                        });
-                    });
-                });
-            });
+        it('works', async () => {
+            const doc = await app.services.elastic.get('doc1');
+            should(doc).be.ok();
         });
 
-        it('should delete a template', (done) => {
-            app.services.elastic.deleteTemplate(app.config.elastic_unit_test_index.template_name, (err, res, status) => {
-
-                should(err).not.be.ok();
-                res.acknowledged.should.be.exactly(true);
-                status.should.be.exactly(200);
-
-                done();
-            });
+        it('works with a type', async () => {
+            const doc = await app.services.elastic.get('doc1', { type: app.services.elastic.types.my_thing });
+            should(doc).be.ok();
         });
 
+        it('works with a type by not returning docs', async () => {
+            const doc = await app.services.elastic.get('doc1', { type: "my_thing2" });
+            should(doc).be.exactly(null);
+        });
     });
 
 });

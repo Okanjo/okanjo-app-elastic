@@ -1,6 +1,6 @@
 {
   "name": "okanjo-app-elastic",
-  "version": "3.0.1",
+  "version": "4.0.0",
   "description": "Service for interfacing with Elasticsearch",
   "main": "ElasticService.js",
   "scripts": {
@@ -23,20 +23,18 @@
   "author": "Okanjo Partners Inc",
   "license": "MIT",
   "devDependencies": {
-    "eslint": "^4.10.0",
-    "mocha": "^4.0.1",
-    "nyc": "^11.3.0",
-    "okanjo-app": "^1.0.1",
-    "should": "^13.1.3"
+    "eslint": "^5.16.0",
+    "mocha": "^6.1.4",
+    "nyc": "^14.1.1",
+    "okanjo-app": "^2.1.0",
+    "should": "^13.2.3",
+    "@elastic/elasticsearch": "^6.8.0"
   },
   "peerDependencies": {
-    "okanjo-app": ">= 1"
+    "okanjo-app": ">= 2",
+    "@elastic/elastichsearch": ">= 6"
   },
-  "dependencies": {
-    "async": "^2.6.0",
-    "elasticsearch": "^15.2.0",
-    "minimatch": "^3.0.4"
-  },
+  "dependencies": {},
   "nyc": {
     "reporter": [
       "text-summary",

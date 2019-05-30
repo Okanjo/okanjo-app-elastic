@@ -6,7 +6,6 @@ Service for interfacing with Elasticsearch for the Okanjo App ecosystem.
 
 This package wraps interfacing with Elasticsearch, so:
 
-* Index management is nearly automatic
 * Common elastic operations are simplified
 * Built in error reporting for common operations
 
@@ -19,122 +18,14 @@ Add to your project like so:
 npm install okanjo-app-elastic
 ```
 
-Note: requires the [`okanjo-app`](https://github.com/okanjo/okanjo-app) module.
+> Peer dependency: Requires [`@elastic/elasticsearch`](https://github.com/elastic/elasticsearch-js) module. Version >= 6.
+
+> Requires the [`okanjo-app`](https://github.com/okanjo/okanjo-app) module.
 
 ## Example Usage
 
-This module works by specifying the index name, schema, and types of documents stored within the index.
-
-Here's a single file example:
-```js
-const OkanjoApp = require('okanjo-app');
-const ElasticService = require('okanjo-app-elastic');
-
-const config = {
-    elasticsearch: {
-        host: '192.168.99.100:9200', // e.g. user:pass@hostname:port of elastic instance(s)
-        requestTimeout: 120000, // how long to wait (in milliseconds) until a response is assumed to be abandoned (e.g. bulk loading)
-        log: 'warning', // logging level, one of: error, warning, info, debug, trace
-
-        // the index the service should manage
-        index: {
-            name: 'foods',
-            schema: { // recommend splitting this out to its own file and then require(schema.js)
-                mappings: {
-                    fruit: {
-                        properties: {
-                            name:                   { type: 'text', include_in_all: true, analyzer: 'html_snowball',
-                                fields: {
-                                    raw:            { type: 'keyword' },
-                                    lowered:        { type: 'text', analyzer: 'lowercase_only' }
-                                }
-                            },
-                            description:            { type: 'text', include_in_all: true, analyzer: 'html_snowball' },
-                            color:                  { type: 'keyword', include_in_all: false },
-                            fruit_only_attribute:   { enabled: false }
-                        }
-                    },
-                    veggie: {
-                        properties: {
-                            name:                   { type: 'text', include_in_all: true, analyzer: 'html_snowball',
-                                fields: {
-                                    raw:            { type: 'keyword' },
-                                    lowered:        { type: 'text', analyzer: 'lowercase_only' }
-                                }
-                            },                            
-                            description:            { type: 'text', include_in_all: true, analyzer: 'html_snowball'},
-                            color:                  { type: 'keyword', include_in_all: false },
-                            veggie_only_attribute:  { enabled: false }
-                        }
-                    }
-                },
-                settings: {
-                    analysis: {
-                        analyzer: {
-                            // custom analyzer that just lowercases as a keyword
-                            lowercase_only: {
-                                type: "custom",
-                                char_filter: [],
-                                tokenizer: "keyword",
-                                filter: ["lowercase"]
-                            },
-            
-                            // custom analyzer that strips html, stopwords, and snowballs
-                            html_snowball: {
-                                type: "custom",
-                                char_filter: ["html_strip"],
-                                tokenizer: "standard",
-                                filter: ["lowercase", "stop", "snowball"]
-                            }
-                        }
-                    }
-                }
-            },
-            types: { // enumeration for the types you defined in the schema, to make it easy for query purposes later
-                fruit: 'fruit',
-                veggie: 'veggie'
-            }
-        }
-    }
-};
-
-const app = new OkanjoApp(config);
-app.services = {
-    elastic: new ElasticService(app, config.elasticsearch)
-};
-
-app.connectToServices(() => {
-    // if we got here, elasticsearch was pinged so we know it's up
-    
-    // Create or verify the index works
-    app.services.elastic.ensure((err) => {
-        if (err) {
-            console.error('Failed to ensure our index in elasticsearch', err);
-            process.exit(1);
-        } else {
-            
-            app.services.elastic.search({
-                query: {
-                    match_all: {}
-                },
-                size: 5
-            }, (err, res) => {
-                if (err) {
-                    console.error('Failed to query elasticsearch', err);
-                    process.exit(2);
-                } else {
-                    console.log(`Search matched ${res.hits.total} total docs, returned ${res.hits.hits.length} docs`);
-                    process.exit(0);
-                }
-            })
-        }
-    });
-    
-});
-```
-
-A more ideal setup for an application can be found in [docs/example-app](https://github.com/okanjo/okanjo-app-elastic/tree/master/docs/example-app).
-It does exactly the same thing as depicted above, but is managed in a much more maintainable way.
+An example application can be found in [docs/example-app](https://github.com/okanjo/okanjo-app-elastic/tree/master/docs/example-app).
+It demonstrates creating an index, loading documents, and searching.
 
 # ElasticService
 
@@ -146,139 +37,94 @@ Elasticsearch management class. Must be instantiated to be used.
 * `elastic.index` – (read-only) The string name of the index this instance is bound to
 * `elastic.schema` – (read-only) The index settings object for the index this instance is bound to
 * `elastic.types` – (read-only) The enumeration of types of documents stored in the index 
-* `elastic.client` – (read-only) The original elasticsearch client, usable for non-wrapped operations 
+* `elastic.client` – (read-only) The elasticsearch client, usable for non-wrapped operations 
 
 ## Methods
 
-### `new ElasticSearch(app, [config])`
+### `new ElasticSearch(app, clientConfig, indexConfig)`
 Creates a new elastic service instance.
 * `app` – The OkanjoApp instance to bind to
-* `config` – The elasticsearch service configuration object.
+* `clientConfig` – The [elasticsearch client configuration](https://www.elastic.co/guide/en/elasticsearch/client/javascript-api/current/client-configuration.html) object
+* `indexConfig` – The index configuration object.
+  * `indexConfig.name` – String name of the index
+  * `indexConfig.schema` – Index configuration. Should be an object that contains the mappings and settings of the index. This value is used as the body of the create index command.
+  * `indexConfig.types` – (Legacy) Object map of key-value pairs, defining the types stored in the index. 
 
-### `elastic.exists(callback)`
-Checks whether the index exists or not.  
-* `callback(err, exists)` – Function to fire when completed
-  * `err` – Error, if present
-  * `exists` – Boolean, `true` if index currently exists or `false` if not.
+### `elastic.exists([options])`
+Checks whether the index exists or not.
+* `options.index` – Specifiy which index to check existence of
+* `options.*` – Passed to the `client.indices.exists` request.  
+Returns `Promise<boolean>`, where the result is `true` if the index exists or `false` if not. 
  
-### `elastic.ping(callback)`
+### `elastic.ping()`
 Pings the elasticsearch server to see if it is available.  
-* `callback(err, exists)` – Function to fire when completed
-  * `err` – Error, if present
-  * `exists` – Boolean, `true` if service is available or `false` if not.
+Returns `Promise<boolean>`, where the result is `true` if the available or `false` if not. 
  
-### `elastic.create([options], callback)`
+### `elastic.create([options])`
 Creates the elasticsearch index as configured by the name and schema.
-* `options` – Optional, create index command options
-  * `index` – The name of the index to create, defaults to `elastic.index`.
-  * `schema` – Optional, The index mappings and settings object, `null` to not set a body at all (e.g. use existing template), or leave unset to default to `elastic.schema`.
-* `callback(err, success, res)` – Function to fire when completed
-  * `err` – Error, if present
-  * `success` – Whether the statusCode of the response was `200`
-  * `res` – The reponse given from elasticsearch
-  
-### `elastic.delete(callback)`
-Deletes the elasticsearch index as configured.
-* `callback(err, success, res)` – Function to fire when completed
-  * `err` – Error, if present
-  * `success` – Whether the statusCode of the response was `200` (or `400` if the index does not exist)
-  * `res` – The reponse given from elasticsearch
-
-### `elastic.ensure(callback)`
-Creates the index if it does not exist, and if it does, compares the live mappings and settings to what's configured, 
-adding new mappings and warning of changes. Useful for typical app startup processes.
-* `callback(err, consistent, exists, settingsConsistent, mappingsConsistent)` – Function to fire when completed
-  * `err` – Error, if present
-  * `consistent` – Whether the index is fully consistent with the local schema.
-  * `exists` – Whether the index existed previously to running `ensure()`
-  * `settingsConsistent` – Whether the settings were consistent with the local schema.
-  * `mappingsConsistent` – Whether the mappings were consistent with the local schema.
-
-Note: You cannot change mappings or settings in elasticsearch indices, but you may add to them.
-
-This method will ensure that your remote mappings and settings match what is stored locally. 
-* Any new mappings will be added.
-* Any conflicting mappings will be reported.
+* `options.index` – The name of the index to create, defaults to the service `index` property.
+* `options.schema` – The index mappings and settings object or `null` to not set a body at all (e.g. use existing template), or leave unset to default to the service `schema` property.
+* `options.*` – Additional create index request options
+Returns `Promise<boolean>`, where the result is `true` if the index was created.
  
-If there are conflicts, you will need to take charge of reindexing. There are a number of ways to do this.
-* Delete, recreate, and reindex the data
-* Create a new index with a different name, reindex the data there, and use aliases to atomically swap the pointer of the index to the new one
+### `elastic.delete([options])`
+Deletes the elasticsearch index as configured.
+* `options.index` – The name of the index to create, defaults to the service `index` property.\
+* `options.*` – Additional delete index request options
+Returns `Promise<boolean>`, where the result is `true` if the index was deleted or does not exist.
 
-### `elastic.search(body, [options,] callback)`
+### `elastic.search(body, [options])`
 Searches the index for documents.
 * `body` – Search request object, e.g. `{ query: { match_all: {} } }`
-* `options` – Elastic request options, e.g. `{ limit: 5 }`
-* `callback(err, res, status)` – Function to fire when completed
-  * `err` – Error, if present
-  * `res` – The response given from elasticsearch
-  * `status` – The statusCode of the response
+* `options.index` – The name of the index to search, defaults to the service `index` property.
+* `options.*` – Elastic request options, e.g. `{ limit: 5 }`
 
-### `elastic.get(id, [options,] callback)`
-Sends a batch of bulk operations to the index.
+### `elastic.get(id, [options])`
+Retrieves a doc from the index.
 * `id` – The id of the document to fetch
-* `options` – Elastic request options
-* `callback(err, res, status)` – Function to fire when completed
-  * `err` – Error, if present
-  * `res` – The response given from elasticsearch
-  * `status` – The statusCode of the response  
+* `options.index` – The name of the index the doc lives in, defaults to the service `index` property.
+* `options.*` – Additional get request options
 
-### `elastic.scroll(scrollId, [options,] callback)`
+### `elastic.scroll(scrollId, [options])`
 Scrolls through an open search cursor. Renews the scroll cursor timeout to 5 minutes.
 * `scrollId` – The active scroll id
-* `options` – Elastic request options
-* `callback(err, res, status)` – Function to fire when completed
-  * `err` – Error, if present
-  * `res` – The response given from elasticsearch
-  * `status` – The statusCode of the response
+* `options.scroll` – Time to let the cursor live. Defaults to `5m`;
+* `options.*` – Additional scroll request options 
   
-### `elastic.clearScroll(scrollId, callback)`
+### `elastic.clearScroll(scrollId, [options])`
 Cleans up an open scroll cursor. Use this when done scrolling.
 * `scrollId` – The active scroll id
-* `callback(err, res, status)` – Function to fire when completed
-  * `err` – Error, if present
-  * `res` – The response given from elasticsearch
-  * `status` – The statusCode of the response
+* `options.*` – Additional clearScroll request options 
 
 ### `elastic.bulk(body, [options,] callback)`
 Sends a batch of bulk operations to the index.
 * `body` – The bulk body payload, array of operations
-* `options` – Elastic request options
-* `callback(err, res, status)` – Function to fire when completed
-  * `err` – Error, if present
-  * `res` – The response given from elasticsearch
-  * `status` – The statusCode of the response
+* `options.index` – The name of the index to operate on, defaults to the service `index` property.
+* `options.timeout` – How long to let the bulk operation run. Defaults to `5m`.
+* `options.refresh` –  `true`, `false`, `wait_for` - If `true` then refresh the effected shards to make this operation visible to search, if `wait_for` then wait for a refresh to make this operation visible to search, if `false` then do nothing with refreshes. Defaults to `wait_for`.
+* `options.*` – Additional bulk request options
 
-### `elastic.getMappings(callback)`
+### `elastic.getMappings([options])`
 Gets the index's current mappings.
-* `callback(err, res, status)` – Function to fire when completed
-  * `err` – Error, if present
-  * `res` – The response given from elasticsearch
-  * `status` – The statusCode of the response
+* `options.index` – The name of the index to operate on, defaults to the service `index` property.
+* `options.*` – Additional getMappings request options
   
-### `elastic.getSettings(callback)`
+### `elastic.getSettings([options])`
 Gets the index's current settings.
-* `callback(err, res, status)` – Function to fire when completed
-  * `err` – Error, if present
-  * `res` – The response given from elasticsearch
-  * `status` – The statusCode of the response
+* `options.index` – The name of the index to operate on, defaults to the service `index` property.
+* `options.*` – Additional getMappings request options
 
-### `elastic.putTemplate(name, schema, index_patterns, [options], callback)`
+### `elastic.putTemplate(name, index_patterns, schema, [options])`
 Creates or updates an index template.
 * `name` – Template name
 * `index_patterns` – Array of index pattern strings
 * `schema` – Template body, e.g. `{ mappings: {}, settings: {} }`
-* `options` – Optional, Elasticsearch route putTemplate options
-* `callback(err, res, status)` – Function to fire when completed
-  * `err` – Error, if present
-  * `res` – The response given from elasticsearch
-  * `status` – The statusCode of the response
+* `options.*` – Additional putTemplate request options
 
 ### `elastic.deleteTemplate(name, callback)`
 * `name` – Template name to delete
-* `callback(err, res, status)` – Function to fire when completed
-  * `err` – Error, if present
-  * `res` – The response given from elasticsearch
-  * `status` – The statusCode of the response
+* `options.*` – Additional deleteTemplate request options
+
  
 ### Not Implemented?
 Is your elastic client function missing? No problem. 
@@ -304,10 +150,10 @@ Before you can run the tests, you'll need a working elasticsearch server. We sug
 For example:
 
 ```bash
-docker pull docker pull docker.elastic.co/elasticsearch/elasticsearch:5.5.3
+docker pull docker pull docker.elastic.co/elasticsearch/elasticsearch:6.5.4
 sudo sysctl -w vm.max_map_count=262144
 # docker-machine ssh default "sudo sysctl -w vm.max_map_count=262144"
-docker run -d -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:5.5.3
+docker run -d -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:6.5.4
 ```
 
 If you use docker via virtualbox (e.g. mac, windows), then you'll want that docker-machine line above instead.

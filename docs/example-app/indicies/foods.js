@@ -2,32 +2,19 @@
 
 module.exports = {
     mappings: {
-        fruit: {
+        _doc: {
             properties: {
-                name:                   { type: 'text', include_in_all: true, analyzer: 'html_snowball',
+                name:                   { type: 'text',  analyzer: 'html_snowball',
                     fields: {
                         raw:            { type: 'keyword' },
                         lowered:        { type: 'text', analyzer: 'lowercase_only' }
                     }
                 },
-                description:            { type: 'text', include_in_all: true, analyzer: 'html_snowball' },
-                color:                  { type: 'keyword', include_in_all: false },
-                fruit_only_attribute:   { enabled: false }
+                type:                   { type: 'keyword' },
+                description:            { type: 'text',  analyzer: 'html_snowball' },
+                color:                  { type: 'keyword', },
             }
         },
-        veggie: {
-            properties: {
-                name:                   { type: 'text', include_in_all: true, analyzer: 'html_snowball',
-                    fields: {
-                        raw:            { type: 'keyword' },
-                        lowered:        { type: 'text', analyzer: 'lowercase_only' }
-                    }
-                },
-                description:            { type: 'text', include_in_all: true, analyzer: 'html_snowball'},
-                color:                  { type: 'keyword', include_in_all: false },
-                veggie_only_attribute:  { enabled: false }
-            }
-        }
     },
     settings: {
         analysis: {
