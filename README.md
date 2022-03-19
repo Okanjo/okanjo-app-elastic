@@ -1,6 +1,6 @@
 # Okanjo Elasticsearch Service
 
-[![Build Status](https://travis-ci.org/Okanjo/okanjo-app-elastic.svg?branch=master)](https://travis-ci.org/Okanjo/okanjo-app-elastic) [![Coverage Status](https://coveralls.io/repos/github/Okanjo/okanjo-app-elastic/badge.svg?branch=master)](https://coveralls.io/github/Okanjo/okanjo-app-elastic?branch=master)
+[![Node.js CI](https://github.com/Okanjo/okanjo-app-elastic/actions/workflows/node.js.yml/badge.svg)](https://github.com/Okanjo/okanjo-app-elastic/actions/workflows/node.js.yml) [![Coverage Status](https://coveralls.io/repos/github/Okanjo/okanjo-app-elastic/badge.svg?branch=master)](https://coveralls.io/github/Okanjo/okanjo-app-elastic?branch=master)
 
 Service for interfacing with Elasticsearch for the Okanjo App ecosystem.
 
@@ -168,6 +168,13 @@ docker run -d -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" docker.e
 If you use docker via virtualbox (e.g. mac, windows), then you'll want that docker-machine line above instead.
 
 To run unit tests and code coverage:
+
+```sh
+npm run report
+```
+
+Or with custom elasticseraach server
+
 ```sh
 ES_HOST=elastic:changeme@192.168.99.100:9200 npm run report
 ```
