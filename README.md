@@ -159,10 +159,10 @@ Before you can run the tests, you'll need a working elasticsearch server. We sug
 For example:
 
 ```bash
-docker pull docker pull docker.elastic.co/elasticsearch/elasticsearch:6.5.4
+docker pull docker.elastic.co/elasticsearch/elasticsearch:6.8.22
 sudo sysctl -w vm.max_map_count=262144
 # docker-machine ssh default "sudo sysctl -w vm.max_map_count=262144"
-docker run -d -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:6.5.4
+docker run -d -p 9200:9200 -p 9300:9300 -e "discovery.type=single-node" docker.elastic.co/elasticsearch/elasticsearch:6.8.22
 ```
 
 If you use docker via virtualbox (e.g. mac, windows), then you'll want that docker-machine line above instead.

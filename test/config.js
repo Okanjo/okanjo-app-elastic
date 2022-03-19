@@ -5,7 +5,7 @@ module.exports = {
         client: {
             // see: https://github.com/elastic/elasticsearch-js#client-options
             name: 'Unit Test Connection', // name to identify the client instance in the events
-            node: [process.env.ES_HOST || 'http://127.0.0.1:9041'], // the Elasticsearch endpoint to use
+            node: [process.env.ES_HOST || 'http://127.0.0.1:9200'], // the Elasticsearch endpoint to use
             requestTimeout: 5000, // max request timeout for each request, usesomething like 30k or 120k
             sniffOnStart: false,
             sniffInterval: 60000
