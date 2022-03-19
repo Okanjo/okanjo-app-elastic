@@ -1,6 +1,6 @@
 {
   "name": "okanjo-app-elastic",
-  "version": "5.0.0",
+  "version": "5.1.0",
   "description": "Service for interfacing with Elasticsearch",
   "main": "ElasticService.js",
   "scripts": {
@@ -26,10 +26,10 @@
     "eslint": "^8.11.0",
     "mocha": "^9.2.2",
     "nyc": "^15.1.0",
-    "okanjo-app": "^3.0.0",
+    "okanjo-app": "^3.1.0",
     "should": "^13.2.3",
     "@elastic/elasticsearch": "^6.8.8",
-    "@hapi/boom": "^7.3.0",
+    "@hapi/boom": "^9.1.4",
     "raven": "^2.6.4"
   },
   "peerDependencies": {
