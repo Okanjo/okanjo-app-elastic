@@ -35,7 +35,7 @@ class ElasticService {
         this.types = index.types;
 
         // Elastic Stuff
-        this.app._serviceConnectors.push(async () => {
+        this.app.registerServiceConnector(async () => {
             await this.ping();
         });
     }
